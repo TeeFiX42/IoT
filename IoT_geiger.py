@@ -1,7 +1,7 @@
 from PiPocketGeiger import RadiationWatch
 import time
 import datetime
-from IoT_MQTT import MeasurementSender
+# from IoT_MQTT import MeasurementSender
 import time
 
 import Adafruit_SSD1306
@@ -9,26 +9,36 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 import threading
+from subprocess import call
 
 
 class ParseResult:
+    BUTTON_STICK_TIME = 2
+    SHUTDOWN_DELAY = 2
+
     def __init__(self):
-        self.display_result = False
+        self.display_result = "on"
         self.send_mqtt = False
         self.instant_message = False
-        self.mqttc = MeasurementSender
+        self.wifi = True
+        # self.mqttc = MeasurementSender
         self.show_information = OnScreen()
+        self.show_information.wifi_on = True
+        self.display_last_change = datetime.datetime.now()
+        self.wifi_last_change = datetime.datetime.now()
+        self.shutdown_button_last_change = None
+
 
     def reveal_result(self, data):
-        if self.display_result:
-            # put here code to show result on mini-display
-            pass
-        else:
-            # put here code to turn off the mini-display (to save battery)
-            pass
+        if data == "radiation":
+                self.show_information.first_text(text="CPM= {}".format(radiationWatch.status()["cpm"]))
+                self.show_information.hit = True
+        if data == "movement":
+                self.show_information.wifi_on = True
+                self.show_information.third_text(text="Movement detected!")
+        '''
         if self.send_mqtt:
             # put here code to send result via MQTT
-            pass
             self.mqttc.connect_with_broker()
             self.mqttc.send_out_measurement(radiationWatch.status())
         else:
@@ -36,23 +46,67 @@ class ParseResult:
             self.mqttc.disconnect()
             # perhaps we can disable wifi to save battery?
             pass
+        '''
 
     def on_radiation(self):
-        if self.instant_message:
-            print("Ray appeared!")
-            print(radiationWatch.status())
-            self.show_information.first_text(text="CPM= {}".format(radiationWatch.status()["cpm"]))
-            self.show_information.hit = True
-            print("kheb text op het scherm gezet")
+        self.reveal_result(data="radiation")
 
     def on_noise(self):
-        if self.instant_message:
-            print("Vibration! Stop moving!")
-            self.show_information.wifi_on = True
-            self.show_information.third_text(text="Movement detected!")
+        self.reveal_result(data="movement")
+
+    def on_wifi(self):
+        print("wifi knopje ingedrukt")
+        time_diff = (datetime.datetime.now() - self.wifi_last_change).total_seconds()
+        if time_diff >= self.BUTTON_STICK_TIME:
+            self.toggle_wifi()
+
+    def toggle_wifi(self):
+        if self.wifi:
+            print("disabling wifi")
+            # call("sudo ifconfig wlan0 down", shell=True)
+            self.wifi = False
+        else:
+            print("enabling wifi")
+            # call("sudo ifconfig wlan0 up", shell=True)
+            self.wifi = True
+        self.show_information.wifi_on = self.wifi
+        self.wifi_last_change = datetime.datetime.now()
+
+    def on_display(self):
+        print("display knopje ingedrukt")
+        print("current state: ", self.show_information.display_state)
+        # prevent multiple callbacks generating mutliple on/off/on triggers:
+
+        time_diff = (datetime.datetime.now() - self.display_last_change).total_seconds()
+        if time_diff >= self.BUTTON_STICK_TIME:
+            if self.show_information.display_state == "on":
+                self.show_information.display_state = "off"
+                self.display_last_change = datetime.datetime.now()
+            else:
+                self.show_information.display_state = "on"
+                self.display_last_change = datetime.datetime.now()
+            self.reveal_result(data="dummy")
+
+    def on_shutdown(self):
+        print("shutdown knopje ingedrukt")
+        # shutdown button must be pressed long time (to avoid mis-intended clicks.)
+        if self.shutdown_button_last_change is None:
+            self.shutdown_button_last_change = datetime.datetime.now()
+        elif (datetime.datetime.now() - self.shutdown_button_last_change).total_seconds() > 3:
+            self.shutdown_button_last_change = None
+        else:
+            time_diff = (datetime.datetime.now() - self.shutdown_button_last_change).total_seconds()
+            if time_diff >= self.SHUTDOWN_DELAY:
+                self.shutdown()
+
+    def shutdown(self):
+        self.show_information.third_text(text="Bye Bye ...")
+        time.sleep(3)
+        self.show_information.display_state = "off"
+        call("sudo shutdown -h now", shell=True)
 
 
-class OnScreen():
+class OnScreen:
     def __init__(self):
         self.display = OLED()
         # boolean to indicate if a measurement is active.
@@ -63,6 +117,8 @@ class OnScreen():
         self.wifi_connected = False
         # boolean to indicate if we are connected to MQTT broker
         self.mqtt_connected = False
+        # value to turn on or off the display
+        self.display_state = "on"
         self.text1 = "Initiating"
         self.text2 = ""
         self.text3 = ""
@@ -120,6 +176,9 @@ class OnScreen():
         else:
             return ""
 
+    def black_screen(self):
+        self.display.all_oled_out()
+
     def draw_on_screen(self):
         '''
         This function needs to run continuously. it will update the displayed information.
@@ -136,7 +195,8 @@ class OnScreen():
                                    pos2=self.line2_pos,
                                    text3=self.print_line3(),
                                    wifi=self.print_wifi_status(),
-                                   mqtt=self.print_mqtt_status()
+                                   mqtt=self.print_mqtt_status(),
+                                   display_state=self.display_state
                                    )
             # time.sleep(0.5)
 
@@ -187,7 +247,7 @@ class OLED:
         self.vline2 = self.verticaltop + 10
         self.vline3 = self.verticaltop + 18
 
-    def text_oled(self, text1="", text2="", pos2= 0, text3="", wifi="", mqtt=""):
+    def text_oled(self, text1="", text2="", pos2= 0, text3="", wifi="", mqtt="", display_state="on"):
         # empty the upper and lower part of the display
         self.draw.rectangle((0, 0, self.width -1, self.vline2 + 3), outline=0, fill=0)
         self.draw.rectangle((0, self.vline3 + 4, self.width - 1, self.height), outline=0, fill=0)
@@ -200,33 +260,58 @@ class OLED:
         self.draw.text((self.left, self.vline3), text3, font=self.font, fill=255)
         self.draw.text((self.left + 115, self.vline1), wifi, font=self.font, fill=255)
         self.draw.text((self.left + 115, self.vline3), mqtt, font=self.font, fill=255)
+        if display_state == "off":
+            self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
         # show the fields on the screen.
         self.disp.image(self.image)
         self.disp.display()
 
 
-def onRadiation():
-    print("Ray appeared!")
+class ButtonHandler(OnScreen):
+    SHUTDOWN = "shutdown"
+    MQTT = "mqtt"
+    WIFI = "wifi"
+
+    def __init__(self):
+        super().__init__(self)
+        self.gpio_pin = None
+        self.action = None
+
+    def trigger(self):
+        if self.action == self.WIFI:
+            self.action_wifi()
+        elif self.action == self.MQTT:
+            self.action_mqtt()
+        elif self.action == self.SHUTDOWN:
+            self.action_shutdown()
 
 
-def onNoise():
-    print("Vibration! Stop moving!")
+    def action_wifi(self):
+        pass
+
+    def action_mqtt(self):
+        pass
+
+    def action_shutdown(self):
+        pass
 
 
 if __name__ == "__main__":
 
     start = datetime.datetime.now()
-    sender = MeasurementSender()
+    # sender = MeasurementSender()
     reporter = ParseResult()
     reporter.send_mqtt = True
     reporter.display_result = True
     reporter.instant_message = True
 
-
-    with RadiationWatch(24, 23) as radiationWatch:
+    with RadiationWatch(radiation_pin=24, noise_pin=23, shutdown_pin=26, wifi_pin=19, display_pin=13) as radiationWatch:
         reporter.show_information.first_text(text="CPM= waiting")
         radiationWatch.register_radiation_callback(reporter.on_radiation)
         radiationWatch.register_noise_callback(reporter.on_noise)
+        radiationWatch.register_display_callback(reporter.on_display)
+        radiationWatch.register_wifi_callback(reporter.on_wifi)
+        radiationWatch.register_shutdown_callback(reporter.on_shutdown)
         while True:
             print("xxx")
             time.sleep(1)
