@@ -1,7 +1,7 @@
 from PiPocketGeiger import RadiationWatch
 import time
 import datetime
-# from IoT_MQTT import MeasurementSender
+from IoT_MQTT import MySender
 import time
 
 import Adafruit_SSD1306
@@ -10,43 +10,63 @@ from PIL import ImageDraw
 from PIL import ImageFont
 import threading
 from subprocess import call
+from IPhelper import create_port_dict
 
 
 class ParseResult:
     BUTTON_STICK_TIME = 2
     SHUTDOWN_DELAY = 2
+    IPv4_VALIDATOR = "192.168"
+    MQTT_INTERVAL = 300
+    MAX_WAIT_FOR_WIFI = 20
 
     def __init__(self):
         self.display_result = "on"
-        self.send_mqtt = False
         self.instant_message = False
         self.wifi = True
-        # self.mqttc = MeasurementSender
+        self.wifi_connected = False
+        self.mqttc = MySender
+        self.mqtt_last_send = datetime.datetime.now()
         self.show_information = OnScreen()
         self.show_information.wifi_on = True
         self.display_last_change = datetime.datetime.now()
         self.wifi_last_change = datetime.datetime.now()
         self.shutdown_button_last_change = None
 
-
     def reveal_result(self, data):
         if data == "radiation":
                 self.show_information.first_text(text="CPM= {}".format(radiationWatch.status()["cpm"]))
                 self.show_information.hit = True
         if data == "movement":
-                self.show_information.wifi_on = True
                 self.show_information.third_text(text="Movement detected!")
-        '''
-        if self.send_mqtt:
-            # put here code to send result via MQTT
-            self.mqttc.connect_with_broker()
-            self.mqttc.send_out_measurement(radiationWatch.status())
-        else:
-            # put here code to disconnect from MQTT if you are connected.
-            self.mqttc.disconnect()
-            # perhaps we can disable wifi to save battery?
-            pass
-        '''
+
+    def mqtt_time(self):
+        # write a check to see of it's time to send mqtt
+        pass
+        # thread the mqtt publisher
+        x = threading.Thread(target=self.mqtt_publisher())
+        x.start()
+
+    def mqtt_publisher(self):
+        # This function should run all time, so that we respect the defined MQTT_INTERVAL time.
+        # If we are connected over Wifi, it might be the time to publish results via mqtt.
+        self.set_wifi_connected_state()
+        if self.wifi_connected == True:
+            # MQTT message needs to be send in a certain interval.
+            # Let's check if that interval is reached.
+            time_diff = (datetime.datetime.now() - self.mqtt_last_send).total_seconds()
+            if time_diff >= ParseResult.MQTT_INTERVAL:
+                # It's MQTT-time :-) Let's try to publish the results over mqtt.
+                try:
+                    self.mqttc.connect_with_broker()
+                except KeyError:
+                    return
+                self.mqttc.send_out_measurement(radiationWatch.status())
+                # Disconnect after publishing as there is no need to keep the connection alive.
+                # We only publish after big amount of time, let's avoid overhead communication.
+                self.show_information.third_text(text="Measurement published")
+                self.mqttc.disconnect()
+
 
     def on_radiation(self):
         self.reveal_result(data="radiation")
@@ -56,29 +76,60 @@ class ParseResult:
 
     def on_wifi(self):
         print("wifi knopje ingedrukt")
+        # prevent multiple callbacks -> generating multiple on/off/on triggers:
         time_diff = (datetime.datetime.now() - self.wifi_last_change).total_seconds()
-        if time_diff >= self.BUTTON_STICK_TIME:
+        if time_diff >= ParseResult.BUTTON_STICK_TIME:
+            print("toggling wifi")
             self.toggle_wifi()
 
     def toggle_wifi(self):
+
         if self.wifi:
             print("disabling wifi")
-            # call("sudo ifconfig wlan0 down", shell=True)
+            call("sudo ifconfig wlan0 down", shell=True)
             self.wifi = False
+            self.show_information.wifi_connected = False
         else:
             print("enabling wifi")
-            # call("sudo ifconfig wlan0 up", shell=True)
+            call("sudo ifconfig wlan0 up", shell=True)
             self.wifi = True
         self.show_information.wifi_on = self.wifi
         self.wifi_last_change = datetime.datetime.now()
+        x = threading.Thread(target=self.set_wifi_connected_state)
+        x.start()
+
+    def set_wifi_connected_state(self):
+        # Function to update the current wifi state (check if we have valid IP on wlan0)
+        # Let's first see if the wifi is turned on.
+        # This function should be called in a thread, as we use a sleep.. (otherwise we might mis some callbacks)
+        if self.wifi:
+            # Wait some time, as it might be that the wifi was turned on a moment ago.
+            # Connecting with wifi takes some time.
+            # time.sleep(ParseResult.WAIT_FOR_WIFI)
+            wlan0_ip = ""
+            start_time = datetime.datetime.now()
+            while wlan0_ip is "":
+                print("retrieving ip address for wlan0")
+                print(wlan0_ip)
+                time.sleep(1)
+                wlan0_ip = create_port_dict()["wlan0"]["IPv4"]
+                time_diff = (datetime.datetime.now() - start_time).total_seconds()
+                if time_diff >= ParseResult.MAX_WAIT_FOR_WIFI:
+                    return()
+            self.show_information.third_text(text="IP: {}".format(wlan0_ip))
+            if ParseResult.IPv4_VALIDATOR in wlan0_ip:
+                self.wifi_connected = True
+            else:
+                # Most possible situation = we have a self assigned dhcp address (196.*)
+                self.wifi_connected = False
+            self.show_information.wifi_connected = self.wifi_connected
 
     def on_display(self):
         print("display knopje ingedrukt")
         print("current state: ", self.show_information.display_state)
-        # prevent multiple callbacks generating mutliple on/off/on triggers:
-
+        # prevent multiple callbacks -> generating mutliple on/off/on triggers:
         time_diff = (datetime.datetime.now() - self.display_last_change).total_seconds()
-        if time_diff >= self.BUTTON_STICK_TIME:
+        if time_diff >= ParseResult.BUTTON_STICK_TIME:
             if self.show_information.display_state == "on":
                 self.show_information.display_state = "off"
                 self.display_last_change = datetime.datetime.now()
@@ -96,7 +147,7 @@ class ParseResult:
             self.shutdown_button_last_change = None
         else:
             time_diff = (datetime.datetime.now() - self.shutdown_button_last_change).total_seconds()
-            if time_diff >= self.SHUTDOWN_DELAY:
+            if time_diff >= ParseResult.SHUTDOWN_DELAY:
                 self.shutdown()
 
     def shutdown(self):
@@ -163,10 +214,11 @@ class OnScreen:
         self.text3_time = datetime.datetime.now()
 
     def print_wifi_status(self):
-        if self.wifi_connected:
-            return "WC"
-        elif self.wifi_on:
-            return "W"
+        if self.wifi_on:
+            if self.wifi_connected:
+                return "Wc"
+            else:
+                return "W "
         else:
             return ""
 
@@ -258,8 +310,8 @@ class OLED:
         self.draw.text((self.left, self.vline1), text1, font=self.font, fill=255)
         self.draw.text((pos2, self.vline2), text2, font=self.font2, fill=255)
         self.draw.text((self.left, self.vline3), text3, font=self.font, fill=255)
-        self.draw.text((self.left + 115, self.vline1), wifi, font=self.font, fill=255)
-        self.draw.text((self.left + 115, self.vline3), mqtt, font=self.font, fill=255)
+        self.draw.text((self.left + 110, self.vline1), wifi, font=self.font, fill=255)
+        self.draw.text((self.left + 110, self.vline3), mqtt, font=self.font, fill=255)
         if display_state == "off":
             self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
         # show the fields on the screen.
@@ -301,7 +353,6 @@ if __name__ == "__main__":
     start = datetime.datetime.now()
     # sender = MeasurementSender()
     reporter = ParseResult()
-    reporter.send_mqtt = True
     reporter.display_result = True
     reporter.instant_message = True
 
@@ -314,6 +365,8 @@ if __name__ == "__main__":
         radiationWatch.register_shutdown_callback(reporter.on_shutdown)
         while True:
             print("xxx")
+            print(reporter.wifi)
+            print(reporter.show_information.wifi_on)
             time.sleep(1)
             time_delta = (datetime.datetime.now() - start).total_seconds()
             '''
