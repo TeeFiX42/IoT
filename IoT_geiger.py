@@ -15,6 +15,7 @@ from IPhelper import create_port_dict
 
 class ParseResult:
     BUTTON_STICK_TIME = 2
+    SHUTDOWN_PRESS = 3
     SHUTDOWN_DELAY = 2
     IPv4_VALIDATOR = "192.168"
     MQTT_INTERVAL = 300
@@ -32,6 +33,7 @@ class ParseResult:
         self.display_last_change = datetime.datetime.now()
         self.wifi_last_change = datetime.datetime.now()
         self.shutdown_button_last_change = None
+        self.reset_time = None
 
     def reveal_result(self, data):
         if data == "radiation":
@@ -138,8 +140,23 @@ class ParseResult:
                 self.display_last_change = datetime.datetime.now()
             self.reveal_result(data="dummy")
 
+    def on_reset(self):
+        # reset action is done in radiationcounter.
+        print("reset knopje ingedrukt")
+        self.show_information.third_text(text="Reset...")
+        self.show_information.first_text(text="CPM= x")
+        # take the time (because if this button was pressed to do a shutdown, we need to measure
+        # how long the button was pressed. (duration is measured in self.on_shutdown()
+        self.reset_time = datetime.datetime.now()
+
     def on_shutdown(self):
         print("shutdown knopje ingedrukt")
+        if self.reset_time:
+            if (datetime.datetime.now() - self.reset_time).total_seconds() > self.SHUTDOWN_PRESS:
+                self.shutdown()
+            else:
+                self.reset_time = None
+        '''
         # shutdown button must be pressed long time (to avoid mis-intended clicks.)
         if self.shutdown_button_last_change is None:
             self.shutdown_button_last_change = datetime.datetime.now()
@@ -149,6 +166,7 @@ class ParseResult:
             time_diff = (datetime.datetime.now() - self.shutdown_button_last_change).total_seconds()
             if time_diff >= ParseResult.SHUTDOWN_DELAY:
                 self.shutdown()
+        '''
 
     def shutdown(self):
         self.show_information.third_text(text="Bye Bye ...")
@@ -363,6 +381,8 @@ if __name__ == "__main__":
         radiationWatch.register_display_callback(reporter.on_display)
         radiationWatch.register_wifi_callback(reporter.on_wifi)
         radiationWatch.register_shutdown_callback(reporter.on_shutdown)
+        radiationWatch.register_reset_callback(reporter.on_reset)
+
         while True:
             print("xxx")
             print(reporter.wifi)
