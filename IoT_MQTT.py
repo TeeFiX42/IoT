@@ -3,13 +3,13 @@ import paho.mqtt.client as mqtt
 
 class MySender:
 
-	MQTT_BROKER_IP = "192.168.0.195"
-	DEVICE_TYPE = "geigercounter"
-	DEVICE_NAME = "gc_1"
-	MEASUREMENT_TYPE = ("cpm", "uSvh")
+	MQTT_BROKER_IP = "mqtt.ferdiland.be"
+	DEVICE_NAME = "geigercounter_1"
+	# MEASUREMENT_TYPE = ("cpm", "uSvh")
+	MEASUREMENT_TYPE = "cpm"
 
 	def __init__(self):
-		self.topic = "/measurement/{}/{}".format(MySender.DEVICE_TYPE, MySender.DEVICE_NAME)
+		self.topic = "event/measurement/{}".format(MySender.DEVICE_NAME)
 		self.mqttc = mqtt.Client(MySender.DEVICE_NAME)
 		self.mqttc.loop_start()
 
@@ -20,11 +20,7 @@ class MySender:
 		self.mqttc.disconnect()
 
 	def send_out_measurement(self, data):
-		for data_type in MySender.MEASUREMENT_TYPE:
-			print(data_type)
-			measurement_topic = "{}/{}".format(self.topic, data_type)
-			print("xxx", measurement_topic)
-			self.mqttc.publish(measurement_topic, data[data_type])
-			print("message send to broker")
+		measurement_topic = "{}/{}".format(self.topic, MySender.MEASUREMENT_TYPE)
+		self.mqttc.publish(measurement_topic, data[MySender.MEASUREMENT_TYPE])
 
 
