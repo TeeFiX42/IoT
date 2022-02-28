@@ -34,6 +34,7 @@ class ParseResult:
         self.wifi_last_change = datetime.datetime.now()
         self.shutdown_button_last_change = None
         self.reset_time = None
+        self.set_wifi_connected_state()
 
     def reveal_result(self, data):
         if data == "radiation":
