@@ -54,7 +54,7 @@ class ParseResult:
         # This function should run all time, so that we respect the defined MQTT_INTERVAL time.
         # If we are connected over Wifi, it might be the time to publish results via mqtt.
         # self.set_wifi_connected_state()
-        if self.wifi_connected == True:
+        while self.wifi_connected == True:
             # MQTT message needs to be send in a certain interval.
             # Let's check if that interval is reached.
             time_diff = (datetime.datetime.now() - self.mqtt_last_send).total_seconds()
