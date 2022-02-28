@@ -14,7 +14,7 @@ class MySender:
 		self.mqttc.loop_start()
 
 	def connect_with_broker(self):
-		self.mqttc.connect(MySender.MQTT_BROKER_IP, 1883, 60)
+		self.mqttc.connect(self.MQTT_BROKER_IP, 1883, 60)
 
 	def disconnect(self):
 		self.mqttc.disconnect()

@@ -11,6 +11,7 @@ from PIL import ImageFont
 import threading
 from subprocess import call
 from IPhelper import create_port_dict
+import paho.mqtt.publish as publish
 
 
 class ParseResult:
@@ -20,13 +21,16 @@ class ParseResult:
     IPv4_VALIDATOR = "192.168"
     MQTT_INTERVAL = 60
     MAX_WAIT_FOR_WIFI = 20
+    MQTT_BROKER_IP = "mqtt.ferdiland.be"
+    DEVICE_NAME = "geigercounter_1"
+    MEASUREMENT_TYPE = "cpm"
 
     def __init__(self):
         self.display_result = "on"
         self.instant_message = False
         self.wifi = True
         self.wifi_connected = False
-        self.mqttc = MySender
+        self.mqttc = MySender()
         self.mqtt_last_send = datetime.datetime.now()
         self.show_information = OnScreen()
         self.show_information.wifi_on = True
@@ -42,6 +46,13 @@ class ParseResult:
                 self.show_information.hit = True
         if data == "movement":
                 self.show_information.third_text(text="Movement detected!")
+
+    def publish_measurement(self):
+        measurement_topic = "event/measurement/{}/{}".format(self.DEVICE_NAME, self.MEASUREMENT_TYPE)
+        payload = radiationWatch.status()[MySender.MEASUREMENT_TYPE]
+        publish.single(topic=measurement_topic,
+                       payload=payload,
+                       hostname=self.MQTT_BROKER_IP)
 
     def mqtt_time(self):
         # write a check to see of it's time to send mqtt
@@ -61,17 +72,8 @@ class ParseResult:
             if time_diff >= ParseResult.MQTT_INTERVAL:
                 print("It's MQTT time")
                 # It's MQTT-time :-) Let's try to publish the results over mqtt.
-                try:
-                    self.mqttc.connect_with_broker()
-                    print("Connected with MQTT broker")
-                except KeyError:
-                    return
-                self.mqttc.send_out_measurement(radiationWatch.status())
-                # Disconnect after publishing as there is no need to keep the connection alive.
-                # We only publish after big amount of time, let's avoid overhead communication.
+                self.publish_measurement()
                 self.show_information.third_text(text="Measurement published")
-                self.mqttc.disconnect()
-
 
     def on_radiation(self):
         self.reveal_result(data="radiation")
