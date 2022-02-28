@@ -121,10 +121,13 @@ class ParseResult:
                 if time_diff >= ParseResult.MAX_WAIT_FOR_WIFI:
                     return()
             self.show_information.third_text(text="IP: {}".format(wlan0_ip))
+            print("Current IP is {}".format(wlan0_ip))
             if ParseResult.IPv4_VALIDATOR in wlan0_ip:
                 self.wifi_connected = True
+                print("IP validated")
             else:
                 # Most possible situation = we have a self assigned dhcp address (196.*)
+                print("IP not valid")
                 self.wifi_connected = False
             self.show_information.wifi_connected = self.wifi_connected
 
