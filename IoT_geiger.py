@@ -18,7 +18,7 @@ class ParseResult:
     SHUTDOWN_PRESS = 3
     SHUTDOWN_DELAY = 2
     IPv4_VALIDATOR = "192.168"
-    MQTT_INTERVAL = 300
+    MQTT_INTERVAL = 60
     MAX_WAIT_FOR_WIFI = 20
 
     def __init__(self):
@@ -58,9 +58,11 @@ class ParseResult:
             # Let's check if that interval is reached.
             time_diff = (datetime.datetime.now() - self.mqtt_last_send).total_seconds()
             if time_diff >= ParseResult.MQTT_INTERVAL:
+                print("It's MQTT time")
                 # It's MQTT-time :-) Let's try to publish the results over mqtt.
                 try:
                     self.mqttc.connect_with_broker()
+                    print("Connected with MQTT broker")
                 except KeyError:
                     return
                 self.mqttc.send_out_measurement(radiationWatch.status())
@@ -384,7 +386,7 @@ if __name__ == "__main__":
         radiationWatch.register_reset_callback(reporter.on_reset)
 
         while True:
-            print("xxx")
+            # print("xxx")
             print(reporter.wifi)
             print(reporter.show_information.wifi_on)
             time.sleep(1)
