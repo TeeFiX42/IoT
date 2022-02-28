@@ -126,8 +126,7 @@ class ParseResult:
             if ParseResult.IPv4_VALIDATOR in wlan0_ip:
                 self.wifi_connected = True
                 print("IP validated")
-                x = threading.Thread(target=self.set_wifi_connected_state)
-                x.start()
+                self.mqtt_time()
             else:
                 # Most possible situation = we have a self assigned dhcp address (196.*)
                 print("IP not valid")
