@@ -321,8 +321,8 @@ class OLED:
 
         # Load default font.
         # self.font = ImageFont.load_default()
-        self.font = ImageFont.truetype(f"{path_of_py}/OpenSans-Bold.ttf", 12)
-        self.font2 = ImageFont.truetype(f"{path_of_py}/OpenSans-Bold.ttf", 9)
+        self.font = ImageFont.truetype("{}/OpenSans-Bold.ttf".format(path_of_py), 12)
+        self.font2 = ImageFont.truetype("{}/OpenSans-Bold.ttf".format(path_of_py), 9)
         # define vertical position of each line.
         self.vline1 = self.verticaltop - 2
         self.vline2 = self.verticaltop + 10
