@@ -11,13 +11,6 @@ class MySender:
 	def __init__(self):
 		self.topic = "event/measurement/{}".format(MySender.DEVICE_NAME)
 		self.mqttc = mqtt.Client(MySender.DEVICE_NAME)
-		self.mqttc.loop_start()
-
-	def connect_with_broker(self):
-		self.mqttc.connect(self.MQTT_BROKER_IP, 1883, 60)
-
-	def disconnect(self):
-		self.mqttc.disconnect()
 
 	def send_out_measurement(self, data):
 		measurement_topic = "{}/{}".format(self.topic, MySender.MEASUREMENT_TYPE)
