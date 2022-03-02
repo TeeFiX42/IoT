@@ -12,6 +12,7 @@ import threading
 from subprocess import call
 from IPhelper import create_port_dict
 import paho.mqtt.publish as publish
+import os
 
 
 class ParseResult:
@@ -27,7 +28,7 @@ class ParseResult:
     DEVICE_NAME = "geigercounter_1"
     MEASUREMENT_TYPE = "cpm"
 
-    def __init__(self, radiationwatch: RadiationWatch):
+    def __init__(self, radiationwatch: RadiationWatch, path_of_py):
         self.display_result = "on"
         self.instant_message = False
         self.radiationwatch = radiationwatch
@@ -35,7 +36,7 @@ class ParseResult:
         self.wifi_connected = False
         self.mqttc = MySender()
         self.mqtt_last_send = datetime.datetime.now()
-        self.show_information = OnScreen()
+        self.show_information = OnScreen(path_of_py=path_of_py)
         self.show_information.wifi_on = True
         self.display_last_change = datetime.datetime.now()
         self.wifi_last_change = datetime.datetime.now()
@@ -187,8 +188,8 @@ class ParseResult:
 
 
 class OnScreen:
-    def __init__(self):
-        self.display = OLED()
+    def __init__(self, path_of_py):
+        self.display = OLED(path_of_py=path_of_py)
         # boolean to indicate if a measurement is active.
         self.measurement_running = False
         # boolean to indicate if we WiFi is on
@@ -282,7 +283,7 @@ class OnScreen:
 
 
 class OLED:
-    def __init__(self):
+    def __init__(self, path_of_py):
         # Raspberry Pi pin configuration:
         RST = 21  # on the PiOLED this pin isnt used
 
@@ -320,8 +321,8 @@ class OLED:
 
         # Load default font.
         # self.font = ImageFont.load_default()
-        self.font = ImageFont.truetype("OpenSans-Bold.ttf", 12)
-        self.font2 = ImageFont.truetype("OpenSans-Bold.ttf", 9)
+        self.font = ImageFont.truetype(f"{path_of_py}/OpenSans-Bold.ttf", 12)
+        self.font2 = ImageFont.truetype(f"{path_of_py}/OpenSans-Bold.ttf", 9)
         # define vertical position of each line.
         self.vline1 = self.verticaltop - 2
         self.vline2 = self.verticaltop + 10
@@ -377,12 +378,12 @@ class ButtonHandler(OnScreen):
 
 if __name__ == "__main__":
 
+    path_of_py = os.path.dirname(os.path.abspath(__file__))
     start = datetime.datetime.now()
     # sender = MeasurementSender()
 
-
     with RadiationWatch(radiation_pin=24, noise_pin=23, shutdown_pin=26, wifi_pin=19, display_pin=13) as radiationWatch:
-        reporter = ParseResult(radiationwatch=radiationWatch)
+        reporter = ParseResult(radiationwatch=radiationWatch, path_of_py=path_of_py)
         reporter.display_result = True
         reporter.instant_message = True
 
