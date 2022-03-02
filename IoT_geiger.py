@@ -15,6 +15,8 @@ import paho.mqtt.publish as publish
 
 
 class ParseResult:
+    ''' This class takes care of managing all actions that has to be done; going from radiation detection, to pushing
+    a button to disable/enable the wifi'''
     BUTTON_STICK_TIME = 2
     SHUTDOWN_PRESS = 3
     SHUTDOWN_DELAY = 2
@@ -42,30 +44,26 @@ class ParseResult:
 
     def reveal_result(self, data):
         if data == "radiation":
-                self.show_information.first_text(text="CPM= {}".format(radiationWatch.status()["cpm"]))
-                self.show_information.hit = True
+            self.show_information.first_text(text="CPM= {}".format(radiationWatch.status()["cpm"]))
+            self.show_information.hit = True
         if data == "movement":
-                self.show_information.third_text(text="Movement detected!")
+            self.show_information.third_text(text="Movement detected!")
 
     def publish_measurement(self):
         measurement_topic = "event/measurement/{}/{}".format(self.DEVICE_NAME, self.MEASUREMENT_TYPE)
-        payload = radiationWatch.status()[MySender.MEASUREMENT_TYPE]
-        publish.single(topic=measurement_topic,
-                       payload=payload,
-                       hostname=self.MQTT_BROKER_IP)
-
-    def mqtt_time(self):
-        # write a check to see of it's time to send mqtt
-        pass
-        # thread the mqtt publisher
-        x = threading.Thread(target=self.mqtt_publisher())
-        x.start()
+        payload = radiationWatch.status()
+        payload_cpm = payload.get(MySender.MEASUREMENT_TYPE, None)
+        if payload_cpm is not None:
+            publish.single(topic=measurement_topic,
+                           payload=payload_cpm,
+                           hostname=self.MQTT_BROKER_IP)
+        else:
+            print("No cpm value found.")
 
     def mqtt_publisher(self):
-        # This function should run all time, so that we respect the defined MQTT_INTERVAL time.
-        # If we are connected over Wifi, it might be the time to publish results via mqtt.
-        # self.set_wifi_connected_state()
-        while self.wifi_connected == True:
+        '''This function should run all time, so that we respect the defined MQTT_INTERVAL time.
+        If we are connected over Wifi, it might be the time to publish results via mqtt. '''
+        while self.wifi_connected:
             # MQTT message needs to be send in a certain interval.
             # Let's check if that interval is reached.
             time_diff = (datetime.datetime.now() - self.mqtt_last_send).total_seconds()
@@ -74,6 +72,7 @@ class ParseResult:
                 # It's MQTT-time :-) Let's try to publish the results over mqtt.
                 self.publish_measurement()
                 self.show_information.third_text(text="Measurement published")
+                self.mqtt_last_send = datetime.datetime.now()
 
     def on_radiation(self):
         self.reveal_result(data="radiation")
@@ -122,13 +121,15 @@ class ParseResult:
                 wlan0_ip = create_port_dict()["wlan0"]["IPv4"]
                 time_diff = (datetime.datetime.now() - start_time).total_seconds()
                 if time_diff >= ParseResult.MAX_WAIT_FOR_WIFI:
-                    return()
+                    return False
             self.show_information.third_text(text="IP: {}".format(wlan0_ip))
             print("Current IP is {}".format(wlan0_ip))
             if ParseResult.IPv4_VALIDATOR in wlan0_ip:
                 self.wifi_connected = True
                 print("IP validated")
-                self.mqtt_time()
+                # thread the mqtt publisher
+                x = threading.Thread(target=self.mqtt_publisher())
+                x.start()
             else:
                 # Most possible situation = we have a self assigned dhcp address (196.*)
                 print("IP not valid")
@@ -208,7 +209,6 @@ class OnScreen:
         self.line2_max_pos = 125
         x = threading.Thread(target=self.draw_on_screen)
         x.start()
-
 
     def print_line1(self):
         line1 = "{}".format(self.text1)
@@ -363,7 +363,6 @@ class ButtonHandler(OnScreen):
             self.action_mqtt()
         elif self.action == self.SHUTDOWN:
             self.action_shutdown()
-
 
     def action_wifi(self):
         pass
