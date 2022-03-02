@@ -27,9 +27,10 @@ class ParseResult:
     DEVICE_NAME = "geigercounter_1"
     MEASUREMENT_TYPE = "cpm"
 
-    def __init__(self):
+    def __init__(self, radiationwatch: RadiationWatch):
         self.display_result = "on"
         self.instant_message = False
+        self.radiationwatch = radiationwatch
         self.wifi = True
         self.wifi_connected = False
         self.mqttc = MySender()
@@ -378,11 +379,13 @@ if __name__ == "__main__":
 
     start = datetime.datetime.now()
     # sender = MeasurementSender()
-    reporter = ParseResult()
-    reporter.display_result = True
-    reporter.instant_message = True
+
 
     with RadiationWatch(radiation_pin=24, noise_pin=23, shutdown_pin=26, wifi_pin=19, display_pin=13) as radiationWatch:
+        reporter = ParseResult(radiationwatch=radiationWatch)
+        reporter.display_result = True
+        reporter.instant_message = True
+
         reporter.show_information.first_text(text="CPM= waiting")
         radiationWatch.register_radiation_callback(reporter.on_radiation)
         radiationWatch.register_noise_callback(reporter.on_noise)
@@ -391,8 +394,10 @@ if __name__ == "__main__":
         radiationWatch.register_shutdown_callback(reporter.on_shutdown)
         radiationWatch.register_reset_callback(reporter.on_reset)
 
+
+
         while True:
-            # print("xxx")
+            print("xxx")
             print(reporter.wifi)
             print(reporter.show_information.wifi_on)
             time.sleep(1)
