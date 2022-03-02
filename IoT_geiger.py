@@ -394,8 +394,7 @@ if __name__ == "__main__":
         radiationWatch.register_shutdown_callback(reporter.on_shutdown)
         radiationWatch.register_reset_callback(reporter.on_reset)
 
-
-
+        print("bleep")
         while True:
             print("xxx")
             print(reporter.wifi)
