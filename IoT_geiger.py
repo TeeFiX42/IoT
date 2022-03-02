@@ -129,7 +129,7 @@ class ParseResult:
                 self.wifi_connected = True
                 print("IP validated")
                 # thread the mqtt publisher
-                x = threading.Thread(target=self.mqtt_publisher())
+                x = threading.Thread(target=self.mqtt_publisher)
                 x.start()
             else:
                 # Most possible situation = we have a self assigned dhcp address (196.*)
